@@ -5404,6 +5404,7 @@ class lognorm_gen(rv_continuous):
         return _norm_logsf(np.log(x) / s)
 
     def _stats(self, s):
+        print("Calculating stats")
         p = np.exp(s*s)
         mu = np.sqrt(p)
         mu2 = p*(p-1)
@@ -5413,6 +5414,14 @@ class lognorm_gen(rv_continuous):
 
     def _entropy(self, s):
         return 0.5 * (1 + np.log(2*np.pi) + 2 * np.log(s))
+    
+    def _lev(self, x, s):
+        print("Calling lognorm._lev")
+        # shape parameter = sigma
+        sigma = s
+        # mu represents scale - this function has loc/scale already stripped out
+        mu = 0
+        return np.exp(mu + sigma**2 / 2) * _norm_cdf((np.log(x) - mu - sigma**2) / sigma) + x * (1 - self._cdf(x, sigma))
 
     @_call_super_mom
     @extend_notes_in_docstring(rv_continuous, notes="""\

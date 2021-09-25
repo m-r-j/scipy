@@ -524,6 +524,10 @@ class rv_frozen:
 
     def support(self):
         return self.dist.support(*self.args, **self.kwds)
+    
+    def lev(self, limit):
+        return self.dist.lev(limit, *self.args, **self.kwds)
+
 
 
 def argsreduce(cond, *args):
@@ -1871,6 +1875,13 @@ class rv_continuous(rv_generic):
 
     def _cdf(self, x, *args):
         return self._cdfvec(x, *args)
+    
+    def _lev(self, limit, *args):
+        print("Calling rv_continuous._lev")
+        _a, _b = self._get_support(*args)
+        # print(f"  _a={_a} _b={_b} limit={limit} args={args}")
+        # TODO - call self.expect instead of calling integrate.quad directly? this calls integrate.quad but does some boundary checking
+        return integrate.quad(self._sf, _a, limit, args=args)[0]
 
     # generic _argcheck, _logcdf, _sf, _logsf, _ppf, _isf, _rvs are defined
     # in rv_generic
@@ -1997,6 +2008,68 @@ class rv_continuous(rv_generic):
         if output.ndim == 0:
             return output[()]
         return output
+    
+    def lev(self, x, *args, **kwds):
+        """
+        Limited Expected Value of the probability density function at x of the given RV.
+
+        Parameters
+        ----------
+        x : array_like
+            quantiles
+        arg1, arg2, arg3,... : array_like
+            The shape parameter(s) for the distribution (see docstring of the
+            instance object for more information)
+        loc : array_like, optional
+            location parameter (default=0)
+        scale : array_like, optional
+            scale parameter (default=1)
+
+        Returns
+        -------
+        lev : ndarray
+            Limited Expected Value distribution function evaluated at `x`
+
+        """
+        # print("Calling rv_continuous.lev")
+
+        args, loc, scale = self._parse_args(*args, **kwds)
+        x, loc, scale = map(asarray, (x, loc, scale))
+        args = tuple(map(asarray, args))
+        _a, _b = self._get_support(*args)
+
+        dtyp = np.find_common_type([x.dtype, np.float64], [])
+        x = np.asarray((x - loc)/scale, dtype=dtyp)
+
+
+        # TODO - what are the conditions? Do I need any checks in here?
+        # conditions here are taken from PPF
+        # looks like:
+        # cond1 - check q is in suitable range
+        # cond2/3 - set to lower/upper bound if q at bounds? haven't checked what argsreduce is actually doing here
+        # need to do something if upper bound is infinity to avoid convergence issues?
+        cond0 = self._argcheck(*args) & (scale > 0) & (loc == loc)
+        # cond1 = (0 < q) & (q < 1)
+        # cond2 = cond0 & (q == 0)
+        # cond3 = cond0 & (q == 1)
+        # cond = cond0 & cond1
+        cond = cond0
+        output = np.full(shape(cond), fill_value=self.badvalue)
+
+        # lower_bound = _a * scale + loc
+        # upper_bound = _b * scale + loc
+        # place(output, cond2, argsreduce(cond2, lower_bound)[0])
+        # place(output, cond3, argsreduce(cond3, upper_bound)[0])
+
+        if np.any(cond):  # call only if at least 1 entry
+            goodargs = argsreduce(cond, *((x,)+args+(scale, loc)))
+            scale, loc, goodargs = goodargs[-2], goodargs[-1], goodargs[:-2]
+            # place(output, cond, self._lev(*goodargs) * scale + loc)
+            place(output, cond, self._lev(*goodargs) * scale + loc)
+        if output.ndim == 0:
+            return output[()]
+        return output
+
 
     def logcdf(self, x, *args, **kwds):
         """Log of the cumulative distribution function at x of the given RV.
